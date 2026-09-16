@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   XCircle,
   Wallet,
+  LogOut,
   Sparkles,
   Zap,
   Info
@@ -77,14 +78,56 @@ export default function AegisDashboard() {
   const [newCoverage, setNewCoverage] = useState("1.5");
   const [showBuyModal, setShowBuyModal] = useState(false);
 
+  const switchOrAddGenLayerNetwork = async () => {
+    if (!(window as any).ethereum) return;
+    const ethereum = (window as any).ethereum;
+    const GENLAYER_CHAIN_ID = "0xf22d"; // 61997 in hex
+
+    try {
+      await ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: GENLAYER_CHAIN_ID }],
+      });
+    } catch (switchError: any) {
+      // Error 4902 indicates chain has not been added to MetaMask
+      if (switchError.code === 4902 || switchError.data?.originalError?.code === 4902) {
+        try {
+          await ethereum.request({
+            method: "wallet_addEthereumChain",
+            params: [
+              {
+                chainId: GENLAYER_CHAIN_ID,
+                chainName: "GenLayer Studio Next",
+                nativeCurrency: {
+                  name: "GEN",
+                  symbol: "GEN",
+                  decimals: 18,
+                },
+                rpcUrls: ["https://studio-dev.genlayer.com/api"],
+                blockExplorerUrls: ["https://explorer-studio-dev.genlayer.com"],
+              },
+            ],
+          });
+        } catch (addError) {
+          console.error("Failed to add GenLayer network:", addError);
+        }
+      } else {
+        console.error("Failed to switch to GenLayer network:", switchError);
+      }
+    }
+  };
+
   const connectWallet = async () => {
     setIsConnecting(true);
     try {
       if ((window as any).ethereum) {
+        // First ensure user is prompted to connect accounts
         const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" });
         if (accounts && accounts.length > 0) {
           setWalletAddress(accounts[0]);
         }
+        // Then auto-switch or add GenLayer Studio Next network
+        await switchOrAddGenLayerNetwork();
       } else {
         setWalletAddress("0x67B8Db39d0cB04Ec9e87aC265aCe06DF07B704A7");
       }
@@ -94,6 +137,10 @@ export default function AegisDashboard() {
     } finally {
       setIsConnecting(false);
     }
+  };
+
+  const disconnectWallet = () => {
+    setWalletAddress(null);
   };
 
   const handlePurchase = (e: React.FormEvent) => {
@@ -175,7 +222,7 @@ export default function AegisDashboard() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <a
               href={`${STUDIO_DEV_EXPLORER}/address/${CONTRACT_ADDRESS}`}
               target="_blank"
@@ -186,13 +233,31 @@ export default function AegisDashboard() {
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
 
-            <button
-              onClick={connectWallet}
-              className="flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black font-bold shadow-lg shadow-cyan-500/20 transition transform active:scale-95"
-            >
-              <Wallet className="w-4 h-4 text-black" />
-              {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : "Connect Wallet"}
-            </button>
+            {walletAddress ? (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 text-sm font-mono font-medium px-3.5 py-1.5 rounded-xl bg-slate-900/90 text-cyan-400 border border-cyan-500/30 shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>{walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</span>
+                </div>
+                <button
+                  onClick={disconnectWallet}
+                  title="Disconnect Wallet"
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition transform active:scale-95"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Disconnect</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={connectWallet}
+                disabled={isConnecting}
+                className="flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black font-bold shadow-lg shadow-cyan-500/20 transition transform active:scale-95 disabled:opacity-50"
+              >
+                <Wallet className="w-4 h-4 text-black" />
+                {isConnecting ? "Connecting..." : "Connect Wallet"}
+              </button>
+            )}
           </div>
         </div>
       </header>
