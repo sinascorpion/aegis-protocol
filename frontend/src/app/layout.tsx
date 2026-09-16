@@ -27,7 +27,27 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[#07090e] text-slate-100`}>
+      <head>
+        <link rel="icon" href="/logo.jpg" />
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              tailwind.config = {
+                darkMode: 'class',
+                theme: {
+                  extend: {
+                    colors: {
+                      background: '#07090e',
+                    }
+                  }
+                }
+              }
+            `,
+          }}
+        />
+      </head>
+      <body className="min-h-screen bg-[#07090e] text-slate-100 antialiased selection:bg-cyan-500 selection:text-black">
         {children}
       </body>
     </html>
