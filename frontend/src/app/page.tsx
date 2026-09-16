@@ -157,9 +157,11 @@ export default function AegisDashboard() {
       <header className="border-b border-slate-800/80 backdrop-blur-md sticky top-0 z-40 bg-[#07090e]/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="relative w-11 h-11 rounded-xl overflow-hidden shadow-lg shadow-cyan-500/20 border border-cyan-500/30">
-              <Image src="/logo.jpg" alt="Aegis AI Logo" fill className="object-cover" />
-            </div>
+            <img
+              src="/logo.png"
+              alt="Aegis AI Logo"
+              className="h-11 w-11 rounded-xl shadow-lg shadow-cyan-500/25 object-cover border border-cyan-500/40"
+            />
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-black text-2xl tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-teal-300 to-indigo-400">
