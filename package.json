@@ -1,0 +1,17 @@
+{
+  "name": "aegis-protocol",
+  "version": "1.0.0",
+  "description": "Aegis AI - Autonomous Parametric Flight & Disruption Insurance on GenLayer Studio Next",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "postinstall": "npm --prefix frontend install",
+    "build": "npm --prefix frontend run build",
+    "dev": "npm --prefix frontend run dev"
+  },
+  "dependencies": {
+    "genlayer-js": "^1.1.8"
+  }
+}
