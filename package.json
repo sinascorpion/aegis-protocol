@@ -9,7 +9,8 @@
   "scripts": {
     "postinstall": "npm --prefix frontend install",
     "build": "npm --prefix frontend run build",
-    "dev": "npm --prefix frontend run dev"
+    "dev": "npm --prefix frontend run dev",
+    "test": "node tests/test_aegis_suite.js"
   },
   "dependencies": {
     "genlayer-js": "^1.1.8"

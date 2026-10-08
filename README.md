@@ -64,6 +64,9 @@ npm install
 
 # 3. Build frontend application
 npm run build
+
+# 4. Run automated on-chain reproducibility test suite
+npm test
 ```
 
 ---
