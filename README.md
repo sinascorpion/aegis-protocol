@@ -3,7 +3,7 @@
 > **Autonomous AI-Powered Parametric Flight & Disruption Insurance Protocol on GenLayer Studio Next**
 
 [![Live DApp](https://img.shields.io/badge/Live%20DApp-aegis--gen.vercel.app-10b981?style=for-the-badge&logo=vercel)](https://aegis-gen.vercel.app)
-[![GenLayer Studio Next](https://img.shields.io/badge/GenLayer-Studio%20Next%20(61997)-8b5cf6?style=for-the-badge)](https://explorer-studio-dev.genlayer.com/address/0xAdBC3dDBa50c0D2c6D79684a3fe0648B2085F1EB)
+[![GenLayer Studio Next](https://img.shields.io/badge/GenLayer-Studio%20Next%20(61997)-8b5cf6?style=for-the-badge)](https://explorer-studio-dev.genlayer.com/address/0x2cb9f5E8e097Bf2f32cA755b9BDc3319B84e2B1a)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
 ---
@@ -13,9 +13,9 @@
 **Aegis AI** is an autonomous parametric insurance protocol natively running on **GenLayer Studio Next (Chain ID 61997)**. It eliminates traditional insurance friction, manual claim adjustment delays, and opaque verification by utilizing GenLayer's non-deterministic Intelligent Contracts and multi-validator AI consensus (gl.nondet.exec_prompt).
 
 - 🌐 **Live Website / DApp**: [https://aegis-gen.vercel.app](https://aegis-gen.vercel.app)
-- 📜 **Deployed Intelligent Contract**: [`0xAdBC3dDBa50c0D2c6D79684a3fe0648B2085F1EB`](https://explorer-studio-dev.genlayer.com/address/0xAdBC3dDBa50c0D2c6D79684a3fe0648B2085F1EB)
+- 📜 **Deployed Intelligent Contract**: [`0x2cb9f5E8e097Bf2f32cA755b9BDc3319B84e2B1a`](https://explorer-studio-dev.genlayer.com/address/0x2cb9f5E8e097Bf2f32cA755b9BDc3319B84e2B1a)
 - ⛓️ **Network**: GenLayer Studio Next (Chain ID: 61997)
-- 🔍 **Block Explorer**: [https://explorer-studio-dev.genlayer.com/address/0xAdBC3dDBa50c0D2c6D79684a3fe0648B2085F1EB](https://explorer-studio-dev.genlayer.com/address/0xAdBC3dDBa50c0D2c6D79684a3fe0648B2085F1EB)
+- 🔍 **Block Explorer**: [https://explorer-studio-dev.genlayer.com/address/0x2cb9f5E8e097Bf2f32cA755b9BDc3319B84e2B1a](https://explorer-studio-dev.genlayer.com/address/0x2cb9f5E8e097Bf2f32cA755b9BDc3319B84e2B1a)
 - 🌐 **RPC Endpoint**: https://studio-dev.genlayer.com/api
 
 ---
@@ -43,7 +43,7 @@ Traditional travel disruption insurance suffers from:
 | Parameter | Value |
 | :--- | :--- |
 | **Live Web App** | [https://aegis-gen.vercel.app](https://aegis-gen.vercel.app) |
-| **Intelligent Contract Address** | [`0xAdBC3dDBa50c0D2c6D79684a3fe0648B2085F1EB`](https://explorer-studio-dev.genlayer.com/address/0xAdBC3dDBa50c0D2c6D79684a3fe0648B2085F1EB) |
+| **Intelligent Contract Address** | [`0x2cb9f5E8e097Bf2f32cA755b9BDc3319B84e2B1a`](https://explorer-studio-dev.genlayer.com/address/0x2cb9f5E8e097Bf2f32cA755b9BDc3319B84e2B1a) |
 | **Network Name** | GenLayer Studio Next |
 | **Chain ID** | 61997 |
 | **RPC Endpoint** | `https://studio-dev.genlayer.com/api` |

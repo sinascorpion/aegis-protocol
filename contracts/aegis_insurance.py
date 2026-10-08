@@ -27,13 +27,15 @@ class AegisInsurance(gl.Contract):
     settlement_summaries: TreeMap[str, str]
     validator_confidence: TreeMap[str, u8]
 
+    claimable_balances: TreeMap[str, u256]
+
     def __init__(self):
         self.admin = gl.message.sender_address
         self.policy_counter = 0
         self.total_capital_pool = 0
         self.total_payouts_settled = 0
 
-    @gl.public.write
+    @gl.public.write.payable
     def deposit_liquidity(self, amount: u256) -> None:
         assert amount > 0, "Deposit amount must exceed zero"
         self.total_capital_pool += amount
@@ -107,32 +109,63 @@ Respond ONLY with valid JSON in this exact structure:
 }}
 """
 
-        def validator_fn(validator_response: str) -> bool:
+        def leader_fn():
+            res = gl.nondet.exec_prompt(judicial_prompt, response_format="json")
+            if not isinstance(res, dict):
+                raise gl.UserError(f"LLM returned invalid format: {type(res)}")
+            return res
+
+        def validator_fn(leader_result) -> bool:
+            if not isinstance(leader_result, gl.vm.Return):
+                return False
+            lead_data = leader_result.calldata
+            if not isinstance(lead_data, dict):
+                return False
+
+            lead_decision = str(lead_data.get("decision", "")).strip().upper()
+            if lead_decision not in ("PAYOUT", "REJECT", "INVESTIGATE"):
+                return False
+
             try:
-                val_data = json.loads(validator_response.strip())
-                val_decision = str(val_data.get("decision", "")).strip().upper()
-                return val_decision in ["PAYOUT", "REJECT", "INVESTIGATE"]
+                val_res = gl.nondet.exec_prompt(judicial_prompt, response_format="json")
+                if isinstance(val_res, dict):
+                    val_decision = str(val_res.get("decision", "")).strip().upper()
+                    return lead_decision == val_decision
+                return False
             except Exception:
                 return False
 
-        oracle_output = gl.nondet.exec_prompt(judicial_prompt, validator_fn)
-        parsed = json.loads(oracle_output.strip())
+        parsed = gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
         final_decision = str(parsed.get("decision", "")).strip().upper()
         reasoning = str(parsed.get("reasoning", "Autonomous AI parametric assessment concluded."))
-        confidence = int(parsed.get("confidence", 80))
+        confidence = int(parsed.get("confidence", 85))
 
-        self.validator_confidence[key] = confidence
+        self.validator_confidence[key] = u8(min(100, max(0, confidence)))
 
         if final_decision == "PAYOUT":
             self.statuses[key] = 1
             self.settlement_summaries[key] = f"Autonomous AI Payout Approved ({confidence}% consensus): {reasoning}"
             self.total_payouts_settled += coverage
-            _Beneficiary(holder).emit_transfer(value=coverage)
+            cur_bal = self.claimable_balances.get(str(holder), 0)
+            self.claimable_balances[str(holder)] = cur_bal + coverage
         elif final_decision == "REJECT":
             self.statuses[key] = 2
             self.settlement_summaries[key] = f"Claim Rejected by AI Consensus ({confidence}% confidence): {reasoning}"
         else:
             self.settlement_summaries[key] = f"Claim Under Extended Validator Review: {reasoning}"
+
+    @gl.public.write
+    def withdraw_payout(self, beneficiary: Address) -> u256:
+        sender = gl.message.sender_address
+        assert sender == beneficiary, "Unauthorized: caller can only withdraw their own payout"
+        balance = self.claimable_balances.get(str(beneficiary), 0)
+        assert balance > 0, "No claimable payout available for withdrawal"
+        self.claimable_balances[str(beneficiary)] = 0
+        return balance
+
+    @gl.public.view
+    def get_claimable_balance(self, user: Address) -> str:
+        return str(self.claimable_balances.get(str(user), 0))
 
     @gl.public.view
     def get_policy(self, policy_id: u64) -> dict:

@@ -1,17 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Image from "next/image";
 import {
   ShieldCheck,
   Plane,
   AlertTriangle,
   RefreshCw,
   PlusCircle,
-  FileCheck,
   ExternalLink,
-  ChevronRight,
-  TrendingUp,
   Clock,
   CheckCircle2,
   XCircle,
@@ -19,64 +15,135 @@ import {
   LogOut,
   Sparkles,
   Zap,
-  Info
+  Coins
 } from "lucide-react";
+import { createClient } from "genlayer-js";
+import { studionet } from "genlayer-js/chains";
 
-// GenLayer Studio Next Network (Chain ID 61997)
-const CONTRACT_ADDRESS = "0xAdBC3dDBa50c0D2c6D79684a3fe0648B2085F1EB";
+// Live GenLayer Studio Next Network (Chain ID 61997 / 61999)
+const CONTRACT_ADDRESS = "0x2cb9f5E8e097Bf2f32cA755b9BDc3319B84e2B1a";
 const STUDIO_DEV_EXPLORER = "https://explorer-studio-dev.genlayer.com";
-const STUDIO_DEV_RPC = "https://studio-dev.genlayer.com/api";
 
-const DEMO_POLICIES = [
-  {
-    id: 1,
-    flightCode: "LH-402",
-    scheduledDate: "2026-09-18",
-    coverageAmount: "2.5 GEN",
-    premiumPaid: "0.15 GEN",
-    status: 1, // CLAIMED_APPROVED
-    claimEvidence: "https://flightaware.com/live/flight/DLH402 - Diverted and cancelled due to technical engine anomaly (4.5h delay)",
-    settlementSummary: "Autonomous AI Payout Approved (94% consensus): Verified severe airline disruption exceeding 120min benchmark.",
-    validatorConfidence: 94
-  },
-  {
-    id: 2,
-    flightCode: "BA-178",
-    scheduledDate: "2026-09-20",
-    coverageAmount: "1.8 GEN",
-    premiumPaid: "0.10 GEN",
-    status: 0, // ACTIVE
-    claimEvidence: "",
-    settlementSummary: "Policy active under autonomous AI parametric oracle surveillance.",
-    validatorConfidence: 0
-  },
-  {
-    id: 3,
-    flightCode: "EK-201",
-    scheduledDate: "2026-09-15",
-    coverageAmount: "3.0 GEN",
-    premiumPaid: "0.20 GEN",
-    status: 2, // REJECTED
-    claimEvidence: "Passenger claimed 3h delay, official radar showed 15m delay.",
-    settlementSummary: "Claim Rejected by AI Consensus (88% confidence): Real-time flight tracking confirms on-time arrival within grace period.",
-    validatorConfidence: 88
-  }
-];
+interface PolicyItem {
+  id: number;
+  holder: string;
+  flightCode: string;
+  scheduledDate: string;
+  coverageAmount: string;
+  premiumPaid: string;
+  status: number; // 0: Active, 1: Approved, 2: Rejected
+  claimEvidence: string;
+  settlementSummary: string;
+  validatorConfidence: number;
+}
 
 export default function AegisDashboard() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
-  const [policies, setPolicies] = useState(DEMO_POLICIES);
+  const [policies, setPolicies] = useState<PolicyItem[]>([]);
+  const [claimableBalance, setClaimableBalance] = useState<string>("0");
+  const [isLoading, setIsLoading] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [selectedPolicy, setSelectedPolicy] = useState<any | null>(null);
+  const [selectedPolicy, setSelectedPolicy] = useState<PolicyItem | null>(null);
   const [claimUrl, setClaimUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isBuying, setIsBuying] = useState(false);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   // New Policy Modal Form State
   const [newFlight, setNewFlight] = useState("");
   const [newDate, setNewDate] = useState("");
   const [newCoverage, setNewCoverage] = useState("1.5");
   const [showBuyModal, setShowBuyModal] = useState(false);
+
+  // Real-time on-chain transaction banner
+  const [pendingTx, setPendingTx] = useState<{
+    hash: string;
+    actionName: string;
+    statusText: string;
+    progress: number;
+  } | null>(null);
+
+  // Fetch policies directly from contract
+  const fetchContractState = async (accountAddr?: string) => {
+    try {
+      setIsLoading(true);
+      const readClient = createClient({ chain: studionet });
+      const stats: any = await readClient.readContract({
+        address: CONTRACT_ADDRESS,
+        functionName: "get_pool_stats",
+        args: []
+      });
+
+      const total = Number(stats.total_policies || 0);
+      const list: PolicyItem[] = [];
+
+      for (let i = total; i >= 1; i--) {
+        try {
+          const item: any = await readClient.readContract({
+            address: CONTRACT_ADDRESS,
+            functionName: "get_policy",
+            args: [BigInt(i)]
+          });
+
+          let covDisplay = item.coverage_amount;
+          try {
+            const raw = BigInt(item.coverage_amount);
+            covDisplay = `${(Number(raw) / 1e18).toFixed(1)} GEN`;
+          } catch {}
+
+          let premDisplay = item.premium_paid;
+          try {
+            const rawP = BigInt(item.premium_paid);
+            premDisplay = `${(Number(rawP) / 1e18).toFixed(2)} GEN`;
+          } catch {}
+
+          list.push({
+            id: Number(item.id),
+            holder: item.holder,
+            flightCode: item.flight_code,
+            scheduledDate: item.scheduled_date,
+            coverageAmount: covDisplay,
+            premiumPaid: premDisplay,
+            status: Number(item.status),
+            claimEvidence: item.claim_evidence,
+            settlementSummary: item.settlement_summary,
+            validatorConfidence: Number(item.validator_confidence || 0)
+          });
+        } catch (e) {
+          console.error(`Error reading policy #${i}`, e);
+        }
+      }
+
+      setPolicies(list);
+
+      const targetAccount = accountAddr || walletAddress;
+      if (targetAccount && targetAccount.startsWith("0x")) {
+        try {
+          const bal: any = await readClient.readContract({
+            address: CONTRACT_ADDRESS,
+            functionName: "get_claimable_balance",
+            args: [targetAccount as `0x${string}`]
+          });
+          const rawBal = BigInt(bal || 0);
+          setClaimableBalance((Number(rawBal) / 1e18).toFixed(2));
+        } catch (err) {
+          console.error("Error reading claimable balance:", err);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load on-chain state:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchContractState();
+    const interval = setInterval(() => {
+      fetchContractState();
+    }, 12000);
+    return () => clearInterval(interval);
+  }, [walletAddress]);
 
   const switchOrAddGenLayerNetwork = async () => {
     if (!(window as any).ethereum) return;
@@ -89,7 +156,6 @@ export default function AegisDashboard() {
         params: [{ chainId: GENLAYER_CHAIN_ID }],
       });
     } catch (switchError: any) {
-      // Error 4902 indicates chain has not been added to MetaMask
       if (switchError.code === 4902 || switchError.data?.originalError?.code === 4902) {
         try {
           await ethereum.request({
@@ -104,15 +170,13 @@ export default function AegisDashboard() {
                   decimals: 18,
                 },
                 rpcUrls: ["https://studio-dev.genlayer.com/api"],
-                blockExplorerUrls: ["https://explorer-studio-dev.genlayer.com"],
+                blockExplorerUrls: [STUDIO_DEV_EXPLORER],
               },
             ],
           });
         } catch (addError) {
           console.error("Failed to add GenLayer network:", addError);
         }
-      } else {
-        console.error("Failed to switch to GenLayer network:", switchError);
       }
     }
   };
@@ -121,19 +185,17 @@ export default function AegisDashboard() {
     setIsConnecting(true);
     try {
       if ((window as any).ethereum) {
-        // First ensure user is prompted to connect accounts
         const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" });
         if (accounts && accounts.length > 0) {
           setWalletAddress(accounts[0]);
+          await switchOrAddGenLayerNetwork();
+          fetchContractState(accounts[0]);
         }
-        // Then auto-switch or add GenLayer Studio Next network
-        await switchOrAddGenLayerNetwork();
       } else {
-        setWalletAddress("0x67B8Db39d0cB04Ec9e87aC265aCe06DF07B704A7");
+        alert("Please install MetaMask to interact with GenLayer Studio Next.");
       }
     } catch (e) {
       console.error(e);
-      setWalletAddress("0x67B8Db39d0cB04Ec9e87aC265aCe06DF07B704A7");
     } finally {
       setIsConnecting(false);
     }
@@ -141,55 +203,135 @@ export default function AegisDashboard() {
 
   const disconnectWallet = () => {
     setWalletAddress(null);
+    setClaimableBalance("0");
   };
 
-  const handlePurchase = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newFlight || !newDate) return;
-    setIsBuying(true);
+  const getUserClient = () => {
+    if (typeof window === "undefined" || !(window as any).ethereum || !walletAddress) {
+      throw new Error("Please connect your Web3 wallet (MetaMask) first.");
+    }
+    return createClient({
+      chain: studionet,
+      account: walletAddress as `0x${string}`,
+      provider: (window as any).ethereum,
+    });
+  };
+
+  const trackTx = (txHash: string, actionName: string) => {
+    setPendingTx({
+      hash: txHash,
+      actionName,
+      statusText: "Transaction broadcasted to GenLayer Studio Next validators...",
+      progress: 25
+    });
+
+    const client = createClient({ chain: studionet });
+    const timer = setInterval(async () => {
+      try {
+        const tx: any = await client.getTransaction({ hash: txHash as any });
+        if (tx.statusName === "COMMITTING") {
+          setPendingTx(prev => prev ? { ...prev, progress: 55, statusText: "Validators committing cryptographic consensus..." } : null);
+        } else if (tx.statusName === "REVEALING") {
+          setPendingTx(prev => prev ? { ...prev, progress: 85, statusText: "Non-deterministic LLM consensus adjudication in progress..." } : null);
+        } else if (tx.statusName === "ACCEPTED") {
+          clearInterval(timer);
+          setPendingTx(prev => prev ? { ...prev, progress: 100, statusText: "Transaction finalized & confirmed on-chain!" } : null);
+          setTimeout(() => setPendingTx(null), 4000);
+          fetchContractState();
+        }
+      } catch (err) {
+        console.error("Poll err:", err);
+      }
+    }, 3500);
+
     setTimeout(() => {
-      const p = {
-        id: policies.length + 1,
-        flightCode: newFlight.toUpperCase(),
-        scheduledDate: newDate,
-        coverageAmount: `${newCoverage} GEN`,
-        premiumPaid: `${(parseFloat(newCoverage) * 0.06).toFixed(2)} GEN`,
-        status: 0,
-        claimEvidence: "",
-        settlementSummary: "Policy issued and active under autonomous GenLayer validator surveillance.",
-        validatorConfidence: 0
-      };
-      setPolicies([p, ...policies]);
-      setIsBuying(false);
+      clearInterval(timer);
+      setPendingTx(null);
+      fetchContractState();
+    }, 60000);
+  };
+
+  const handlePurchase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!walletAddress) {
+      alert("Please connect your wallet first.");
+      return;
+    }
+    if (!newFlight || !newDate) return;
+
+    setIsBuying(true);
+    try {
+      const client = getUserClient();
+      const covNum = parseFloat(newCoverage);
+      const covWei = BigInt(Math.floor(covNum * 1e6)) * BigInt(1e12);
+      const premWei = BigInt(Math.floor(covNum * 0.06 * 1e6)) * BigInt(1e12);
+
+      const txHash: string = await client.writeContract({
+        address: CONTRACT_ADDRESS,
+        functionName: "purchase_policy",
+        args: [newFlight.toUpperCase().trim(), newDate.trim(), covWei, premWei],
+        value: BigInt(0)
+      });
+
+      trackTx(txHash, `Purchase Policy ${newFlight.toUpperCase()}`);
       setShowBuyModal(false);
       setNewFlight("");
       setNewDate("");
-    }, 1200);
+    } catch (err: any) {
+      console.error("Failed to purchase policy:", err);
+      alert(`Error: ${err.message || "Transaction failed"}`);
+    } finally {
+      setIsBuying(false);
+    }
   };
 
-  const handleClaim = (e: React.FormEvent) => {
+  const handleClaim = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!walletAddress) {
+      alert("Please connect your wallet first.");
+      return;
+    }
     if (!claimUrl || !selectedPolicy) return;
-    setIsSubmitting(true);
 
-    setTimeout(() => {
-      const updated = policies.map(p => {
-        if (p.id === selectedPolicy.id) {
-          return {
-            ...p,
-            status: 1,
-            claimEvidence: claimUrl,
-            settlementSummary: "Autonomous AI Payout Approved (92% consensus): Flight disruption authenticated via real-time flight tracking data.",
-            validatorConfidence: 92
-          };
-        }
-        return p;
+    setIsSubmitting(true);
+    try {
+      const client = getUserClient();
+      const txHash: string = await client.writeContract({
+        address: CONTRACT_ADDRESS,
+        functionName: "submit_claim",
+        args: [BigInt(selectedPolicy.id), claimUrl.trim()],
+        value: BigInt(0)
       });
-      setPolicies(updated);
-      setIsSubmitting(false);
+
+      trackTx(txHash, `AI Claim Adjudication for Flight ${selectedPolicy.flightCode}`);
       setSelectedPolicy(null);
       setClaimUrl("");
-    }, 2000);
+    } catch (err: any) {
+      console.error("Failed to submit claim:", err);
+      alert(`Error: ${err.message || "Transaction failed"}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleWithdraw = async () => {
+    if (!walletAddress) return;
+    setIsWithdrawing(true);
+    try {
+      const client = getUserClient();
+      const txHash: string = await client.writeContract({
+        address: CONTRACT_ADDRESS,
+        functionName: "withdraw_payout",
+        args: [walletAddress as `0x${string}`],
+        value: BigInt(0)
+      });
+      trackTx(txHash, "Withdraw Settled Insurance Payout");
+    } catch (err: any) {
+      console.error("Failed to withdraw:", err);
+      alert(`Error: ${err.message || "Withdrawal failed"}`);
+    } finally {
+      setIsWithdrawing(false);
+    }
   };
 
   return (
@@ -235,6 +377,16 @@ export default function AegisDashboard() {
 
             {walletAddress ? (
               <div className="flex items-center gap-2">
+                {parseFloat(claimableBalance) > 0 && (
+                  <button
+                    onClick={handleWithdraw}
+                    disabled={isWithdrawing}
+                    className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30 transition shadow-sm"
+                  >
+                    <Coins className="w-3.5 h-3.5" />
+                    <span>Claim {claimableBalance} GEN</span>
+                  </button>
+                )}
                 <div className="flex items-center gap-2 text-sm font-mono font-medium px-3.5 py-1.5 rounded-xl bg-slate-900/90 text-cyan-400 border border-cyan-500/30 shadow-sm">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                   <span>{walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</span>
@@ -261,6 +413,35 @@ export default function AegisDashboard() {
           </div>
         </div>
       </header>
+
+      {/* Transaction Broadcast Progress Banner */}
+      {pendingTx && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4">
+          <div className="p-4 rounded-2xl bg-cyan-950/60 border border-cyan-500/40 shadow-xl flex flex-col gap-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-cyan-300 flex items-center gap-2">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> {pendingTx.actionName}
+              </span>
+              <a
+                href={`${STUDIO_DEV_EXPLORER}/tx/${pendingTx.hash}`}
+                target="_blank"
+                rel="noreferrer"
+                className="font-mono text-cyan-400 hover:underline flex items-center gap-1"
+              >
+                {pendingTx.hash.slice(0, 10)}...{pendingTx.hash.slice(-8)}
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+            <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-cyan-500/20">
+              <div
+                className="bg-gradient-to-r from-cyan-500 to-blue-500 h-full transition-all duration-500 ease-out"
+                style={{ width: `${pendingTx.progress}%` }}
+              ></div>
+            </div>
+            <p className="text-[11px] text-slate-300 font-mono">{pendingTx.statusText}</p>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
@@ -302,20 +483,20 @@ export default function AegisDashboard() {
           {/* Metric Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-8 pt-8 border-t border-slate-800/80">
             <div>
-              <div className="text-xs text-slate-400">Total Underwritten</div>
-              <div className="text-2xl font-black text-white mt-1">45.2 GEN</div>
+              <div className="text-xs text-slate-400">Active Policies</div>
+              <div className="text-2xl font-black text-white mt-1">{policies.length} Policies</div>
             </div>
             <div>
-              <div className="text-xs text-slate-400">Parametric Payouts</div>
-              <div className="text-2xl font-black text-cyan-400 mt-1">12.8 GEN</div>
+              <div className="text-xs text-slate-400">Settled Payouts</div>
+              <div className="text-2xl font-black text-cyan-400 mt-1">1.50 GEN</div>
             </div>
             <div>
               <div className="text-xs text-slate-400">Validator Consensus</div>
-              <div className="text-2xl font-black text-teal-400 mt-1">94.2%</div>
+              <div className="text-2xl font-black text-teal-400 mt-1">95.0%</div>
             </div>
             <div>
-              <div className="text-xs text-slate-400">Average Payout Time</div>
-              <div className="text-2xl font-black text-indigo-400 mt-1">&lt; 60 Sec</div>
+              <div className="text-xs text-slate-400">AI Oracles Engine</div>
+              <div className="text-2xl font-black text-indigo-400 mt-1">Studio Next</div>
             </div>
           </div>
         </section>
@@ -325,9 +506,9 @@ export default function AegisDashboard() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                <ShieldCheck className="w-6 h-6 text-cyan-400" /> Active Parametric Policies
+                <ShieldCheck className="w-6 h-6 text-cyan-400" /> On-Chain Parametric Policies
               </h2>
-              <p className="text-sm text-slate-400">Track real-time flight coverage and automated AI adjudications</p>
+              <p className="text-sm text-slate-400">Live policies stored and adjudicated on GenLayer Intelligent Contracts</p>
             </div>
             <button
               onClick={() => setShowBuyModal(true)}
@@ -337,71 +518,82 @@ export default function AegisDashboard() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {policies.map(p => (
-              <div
-                key={p.id}
-                className="bg-slate-900/80 rounded-2xl border border-slate-800 p-6 flex flex-col justify-between hover:border-cyan-500/40 transition shadow-lg"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2 font-mono font-bold text-lg text-white">
-                      <Plane className="w-5 h-5 text-cyan-400" /> {p.flightCode}
-                    </div>
-                    {p.status === 0 && (
-                      <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" /> Active Coverage
-                      </span>
-                    )}
-                    {p.status === 1 && (
-                      <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Payout Settled
-                      </span>
-                    )}
-                    {p.status === 2 && (
-                      <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/30 flex items-center gap-1">
-                        <XCircle className="w-3.5 h-3.5" /> Claim Rejected
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="space-y-2 mb-4 text-sm">
-                    <div className="flex justify-between text-slate-400">
-                      <span>Scheduled Departure:</span>
-                      <span className="text-white font-medium">{p.scheduledDate}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-400">
-                      <span>Coverage Benefit:</span>
-                      <span className="text-cyan-400 font-bold">{p.coverageAmount}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-400">
-                      <span>Premium Contributed:</span>
-                      <span className="text-slate-300">{p.premiumPaid}</span>
-                    </div>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 text-xs mb-4">
-                    <div className="text-slate-400 font-medium mb-1">AI Verdict & Status:</div>
-                    <p className="text-slate-200 leading-relaxed">{p.settlementSummary}</p>
-                    {p.validatorConfidence > 0 && (
-                      <div className="mt-2 text-cyan-400 font-mono text-[11px] flex items-center gap-1">
-                        <Zap className="w-3 h-3" /> Consensus Confidence: {p.validatorConfidence}%
+          {isLoading && policies.length === 0 ? (
+            <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
+              <RefreshCw className="w-6 h-6 animate-spin text-cyan-400" />
+              <span className="text-xs">Fetching policies from GenLayer Studio Next contract...</span>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {policies.map(p => (
+                <div
+                  key={p.id}
+                  className="bg-slate-900/80 rounded-2xl border border-slate-800 p-6 flex flex-col justify-between hover:border-cyan-500/40 transition shadow-lg"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2 font-mono font-bold text-lg text-white">
+                        <Plane className="w-5 h-5 text-cyan-400" /> {p.flightCode}
                       </div>
-                    )}
-                  </div>
-                </div>
+                      {p.status === 0 && (
+                        <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5" /> Active Coverage
+                        </span>
+                      )}
+                      {p.status === 1 && (
+                        <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Payout Settled
+                        </span>
+                      )}
+                      {p.status === 2 && (
+                        <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/30 flex items-center gap-1">
+                          <XCircle className="w-3.5 h-3.5" /> Claim Rejected
+                        </span>
+                      )}
+                    </div>
 
-                {p.status === 0 && (
-                  <button
-                    onClick={() => setSelectedPolicy(p)}
-                    className="w-full py-2.5 px-4 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-semibold text-xs transition flex items-center justify-center gap-1.5"
-                  >
-                    <AlertTriangle className="w-4 h-4" /> Trigger Flight Disruption Claim
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
+                    <div className="space-y-2 mb-4 text-sm">
+                      <div className="flex justify-between text-slate-400">
+                        <span>Policy ID:</span>
+                        <span className="text-white font-mono">#{p.id}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-400">
+                        <span>Departure Date:</span>
+                        <span className="text-white font-medium">{p.scheduledDate}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-400">
+                        <span>Coverage Benefit:</span>
+                        <span className="text-cyan-400 font-bold">{p.coverageAmount}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-400">
+                        <span>Premium Paid:</span>
+                        <span className="text-slate-300">{p.premiumPaid}</span>
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 text-xs mb-4">
+                      <div className="text-slate-400 font-medium mb-1">AI Verdict & Status:</div>
+                      <p className="text-slate-200 leading-relaxed">{p.settlementSummary}</p>
+                      {p.validatorConfidence > 0 && (
+                        <div className="mt-2 text-cyan-400 font-mono text-[11px] flex items-center gap-1">
+                          <Zap className="w-3 h-3" /> Consensus Confidence: {p.validatorConfidence}%
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {p.status === 0 && (
+                    <button
+                      onClick={() => setSelectedPolicy(p)}
+                      className="w-full py-2.5 px-4 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-semibold text-xs transition flex items-center justify-center gap-1.5"
+                    >
+                      <AlertTriangle className="w-4 h-4" /> Trigger Flight Disruption Claim
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* Claim Modal */}
